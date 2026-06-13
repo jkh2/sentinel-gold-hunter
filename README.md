@@ -2,7 +2,7 @@
 
 ![Gold Hunter Intel Dashboard](image1.jpg)
 
-**[▶ Launch Live App](https://jkh2.github.io/sentinel-gold-hunter/gold_hunter_intel_dashboard_v4.html)**
+**[▶ Launch Live App](https://jkh2.github.io/sentinel-gold-hunter/index.html)**
 
 A single-file, browser-based gold prospecting intelligence tool that maps **where gold is geologically favorable and historically documented** across the United States. Built on live USGS and BLM data, embedded historic district knowledge, and a geographic prospectivity model — not just a dot map.
 
