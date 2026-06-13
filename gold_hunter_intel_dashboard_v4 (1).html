@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gold Hunter Intel Dashboard V4</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --gold:#ffd24a; --gold-dim:#b9892a; --line:rgba(255,210,74,.22);
+    --bg:#0b0905; --panel:#120d06; --panel2:#171107;
+    --text:#f3ead7; --muted:#a99a78; --good:#7fe09a; --warn:#ffb15f; --bad:#ff7a72;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+  #app{height:100%;display:grid;grid-template-columns:430px 1fr;transition:grid-template-columns .2s ease}
+  #app.collapsed{grid-template-columns:0 1fr}
+  #side{grid-column:1;overflow-y:auto;border-right:1px solid var(--line);background:linear-gradient(180deg,#140e06,#0b0905);padding:16px 16px 40px}
+  #map{grid-column:2;position:relative}
+  h1{font-size:18px;margin:0 0 2px;color:var(--gold);letter-spacing:.3px}
+  h1 span{color:var(--gold-dim)}
+  .sub{font-size:11px;color:var(--muted);margin-bottom:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--gold);margin:0 0 9px}
+  .tag{font-size:11px;color:var(--muted);line-height:1.5}
+  .tag b{color:var(--text)}
+  .step{font-size:12px;color:var(--text);margin:5px 0;padding-left:18px;position:relative}
+  .step:before{content:"›";position:absolute;left:4px;color:var(--gold)}
+  label{font-size:12px;color:var(--text)}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;flex-wrap:wrap}
+  select,input[type=range]{accent-color:var(--gold)}
+  select{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:6px 8px;font-size:12px;flex:1;min-width:120px}
+  button{background:linear-gradient(180deg,#ffe27a,#e0a92a);color:#241600;border:none;border-radius:10px;padding:9px 12px;font-weight:800;font-size:12px;cursor:pointer}
+  button:hover{filter:brightness(1.06)}
+  button:disabled{opacity:.5;cursor:default}
+  button.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line);font-weight:700;padding:6px 10px}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap}
+  .pill{font-size:10px;border-radius:999px;padding:2px 8px;border:1px solid var(--line);color:var(--muted);background:rgba(255,210,74,.05)}
+  .pill.ok{color:#0c0c0c;background:var(--good);border-color:transparent}
+  .pill.warn{color:#1a1300;background:var(--warn);border-color:transparent}
+  .pill.bad{color:#fff;background:var(--bad);border-color:transparent}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .metric{background:rgba(255,210,74,.06);border:1px solid var(--line);border-radius:14px;padding:10px}
+  .metric b{display:block;font-size:20px;color:#fff}
+  .metric span{font-size:11px;color:var(--muted)}
+  .small{font-size:12px;color:var(--text);line-height:1.5}
+  .tiny{font-size:11px;color:var(--muted);line-height:1.5}
+  .danger{color:var(--bad)}
+  #status{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:#cdbb8d;background:#0a0703;border:1px solid var(--line);border-radius:10px;padding:9px;white-space:pre-wrap;max-height:150px;overflow:auto}
+  .target{border:1px solid var(--line);border-radius:12px;padding:9px;margin-bottom:8px;background:var(--panel2)}
+  .target .head{display:flex;justify-content:space-between;align-items:center}
+  .target .score{font-weight:900;color:var(--gold);font-size:15px}
+  .risk-low{color:var(--good)} .risk-medium{color:var(--warn)} .risk-high{color:var(--bad)} .risk-verify{color:var(--muted)}
+  #panelBtn{position:absolute;top:12px;right:12px;z-index:1000}
+  #legend{position:absolute;left:12px;bottom:14px;z-index:1000;background:rgba(12,9,4,.86);border:1px solid var(--line);border-radius:12px;padding:9px 11px;backdrop-filter:blur(4px)}
+  #legend .bar{height:9px;width:180px;border-radius:6px;margin:5px 0 3px;background:linear-gradient(90deg,rgba(60,38,0,.3),#6b4400,#b97e00,#ffbf00,#ffe169,#fff3c0)}
+  #legend .ends{display:flex;justify-content:space-between;font-size:10px;color:var(--muted)}
+  #legend .ttl{font-size:11px;color:var(--gold);font-weight:700}
+  .leaflet-control-layers{background:rgba(15,11,5,.92)!important;color:var(--text)!important;border:1px solid var(--line)!important}
+  .leaflet-control-layers label{color:var(--text)!important;font-size:12px}
+  .leaflet-popup-content-wrapper{background:#171107;color:var(--text);border:1px solid rgba(255,210,74,.32)}
+  .leaflet-popup-tip{background:#171107}
+  .popup-title{font-weight:900;color:var(--gold);margin-bottom:6px}
+  .kv{display:grid;grid-template-columns:120px 1fr;gap:4px 8px;font-size:12px}
+  .kv div:nth-child(odd){color:var(--muted)}
+  @media(max-width:950px){
+    #app{grid-template-columns:1fr;grid-template-rows:48% 52%}
+    #side{grid-row:2;border-right:none;border-top:1px solid var(--line)}
+    #map{grid-row:1}
+    #app.collapsed{grid-template-rows:100% 0}
+    #app.collapsed #side{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <h1>Gold Hunter <span>Intel V4</span></h1>
+    <div class="sub">Prospectivity surface · evidence + geology · access-risk aware</div>
+
+    <div class="card">
+      <div class="tag">A field-targeting prototype. The heat is a <b>scored prospectivity surface</b> — where gold is geologically favorable and historically documented — <b>not</b> gold concentration. It keeps <b>prospectivity</b>, <b>confidence</b>, and <b>access risk</b> separate.</div>
+    </div>
+
+    <div class="card">
+      <h2>1 · Go somewhere</h2>
+      <div class="row">
+        <select id="jumpSelect">
+          <option value="39.5,-105.7,7">Colorado Mineral Belt</option>
+          <option value="40.3,-116.4,8">Nevada — Carlin / Battle Mtn</option>
+          <option value="38.5,-120.6,8">California Mother Lode</option>
+          <option value="38.0,-117.2,8">Nevada — Tonopah / Goldfield</option>
+          <option value="44.3,-103.6,9">Black Hills, SD</option>
+          <option value="64.7,-147.5,8">Interior Alaska — Fairbanks</option>
+          <option value="64.6,-164.8,8">Seward Peninsula — Nome</option>
+          <option value="34.0,-112.7,8">Central Arizona — Bradshaw</option>
+          <option value="34.5,-84.0,9">Dahlonega Gold Belt, GA</option>
+          <option value="45.3,-112.0,8">SW Montana</option>
+          <option value="39.5,-98.0,4">Lower 48 overview</option>
+        </select>
+        <button id="jumpBtn">Go</button>
+      </div>
+      <div class="btnrow"><button class="secondary" id="locBtn">My location</button></div>
+      <div class="step">Pick a district, then press <b>Scan area</b> to pull live records.</div>
+      <div class="tiny" id="viewportHint" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card">
+      <h2>2 · Evidence sources</h2>
+      <div class="row"><input id="mrdsToggle" type="checkbox" checked><label for="mrdsToggle">USGS MRDS gold records (weighted by status)</label><span id="srcMrds" class="pill">idle</span></div>
+      <div class="row"><input id="claimsToggle" type="checkbox"><label for="claimsToggle">BLM active mining claims (access caution)</label><span id="srcClaims" class="pill">idle</span></div>
+      <div class="row"><input id="landToggle" type="checkbox" checked><label for="landToggle">BLM land status (who manages the surface)</label><span id="srcLand" class="pill">idle</span></div>
+      <div class="row">
+        <label>Max records</label>
+        <select id="limitSelect"><option>2000</option><option selected>4000</option><option>8000</option></select>
+      </div>
+      <div class="btnrow" style="margin-top:6px">
+        <button id="loadBtn">Scan area</button>
+        <button class="secondary" id="clearBtn">Clear</button>
+      </div>
+      <div class="tiny" style="margin-top:6px">Embedded gold districts &amp; geology always render, so the surface works even before a scan.</div>
+    </div>
+
+    <div class="card">
+      <h2>3 · Model controls</h2>
+      <div class="row">
+        <label>Deposit focus</label>
+        <select id="depositBias"><option value="balanced">Balanced</option><option value="placer">Placer (streams)</option><option value="lode">Lode (hardrock)</option></select>
+      </div>
+      <div class="row"><label>Influence radius</label><input id="influence" type="range" min="3" max="40" value="12"><span class="tiny" id="influenceKm">12 km</span></div>
+      <div class="row"><label>Geology weight</label><input id="geoWeight" type="range" min="0" max="100" value="55"><span class="tiny" id="geoWeightPct">55%</span></div>
+      <div class="row"><label>Surface opacity</label><input id="heatOpacity" type="range" min="20" max="95" value="72"></div>
+      <div class="row"><input id="autoRescan" type="checkbox"><label for="autoRescan">Auto re-scan records when I stop moving</label></div>
+    </div>
+
+    <div class="card">
+      <h2>Dashboard</h2>
+      <div class="grid">
+        <div class="metric"><b id="mGold">—</b><span>gold records loaded</span></div>
+        <div class="metric"><b id="mProd">—</b><span>producers / past</span></div>
+        <div class="metric"><b id="mTop">—</b><span>top target score</span></div>
+        <div class="metric"><b id="mConf">—</b><span>top target confidence</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Ranked targets</h2>
+      <div id="targets" class="small">Move the map or press <b>Scan area</b> to rank target cells.</div>
+    </div>
+
+    <div class="card">
+      <h2>Point inspector</h2>
+      <div id="inspector" class="small">Click anywhere on the map to audit nearby evidence, land status, and field notes.</div>
+      <div class="row" style="margin-top:8px"><label>Inspect radius</label><input id="inspectRadius" type="range" min="1" max="25" value="6"><span class="tiny" id="inspectMiles">6 mi</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Activity</h2>
+      <div id="status">Ready.</div>
+    </div>
+
+    <div class="card">
+      <div class="tiny"><b>Honesty notes.</b> The surface is a relative <b>prospectivity model</b>, not assay data. MRDS stopped systematic updates in 2011, so absence of a record is not absence of gold. Embedded geology is a coarse heuristic. <b>Always</b> verify active claims (BLM MLRS), land ownership, and access rights before any field work — the land-status layer is the first gate, not permission. Single-file browser prototype; public services may throttle or change.</div>
+    </div>
+  </aside>
+
+  <div id="map">
+    <button id="panelBtn" class="secondary">☰ Panel</button>
+    <div id="legend">
+      <div class="ttl">Gold prospectivity (relative)</div>
+      <div class="bar"></div>
+      <div class="ends"><span>lower</span><span>higher</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+
+  /* ---------- Embedded knowledge: historic districts ---------- */
+  /* [lat, lng, weight(0-1 significance), type] type: 0=both 1=placer 2=lode */
+  const DISTRICTS = [
+    [39.219,-121.061,1.0,0],[39.262,-121.016,0.8,0],[38.800,-120.892,0.9,1],[38.730,-120.799,0.8,0],
+    [38.349,-120.774,0.8,2],[38.393,-120.802,0.7,2],[37.984,-120.382,0.8,0],[38.068,-120.548,0.8,0],
+    [38.035,-120.402,0.7,1],[37.485,-119.966,0.7,2],[38.897,-121.077,0.7,1],[39.559,-120.826,0.8,1],
+    [39.566,-120.629,0.6,2],[41.735,-122.634,0.7,1],[40.731,-122.942,0.7,1],[41.792,-123.380,0.5,1],
+    [40.94,-116.35,1.0,2],[40.717,-116.102,0.9,2],[40.19,-116.62,0.9,2],[40.642,-116.934,0.8,0],
+    [38.713,-117.063,0.9,0],[38.067,-117.231,0.8,2],[37.708,-117.235,0.9,2],[39.309,-119.649,0.9,2],
+    [41.873,-115.428,0.6,2],[36.901,-116.828,0.6,2],[35.467,-114.919,0.5,2],[38.86,-118.39,0.6,2],
+    [38.745,-105.178,1.0,2],[38.708,-105.142,0.9,2],[39.802,-105.514,0.9,2],[39.742,-105.514,0.8,0],
+    [39.251,-106.292,0.9,2],[39.482,-106.043,0.8,1],[39.224,-106.001,0.8,1],[39.284,-106.064,0.7,0],
+    [37.937,-107.812,0.8,2],[37.812,-107.665,0.8,2],[38.023,-107.671,0.7,2],[37.849,-106.926,0.6,2],
+    [40.06,-105.41,0.6,2],[44.352,-103.766,1.0,2],[44.376,-103.729,0.8,1],[43.901,-103.426,0.6,2],
+    [64.84,-147.72,0.9,1],[64.50,-165.40,0.9,1],[58.30,-134.42,0.8,2],[64.30,-141.80,0.6,1],
+    [60.97,-149.10,0.6,1],[61.78,-149.30,0.7,2],[33.84,-112.83,0.8,2],[35.03,-114.38,0.8,2],
+    [34.13,-112.78,0.7,1],[33.66,-114.23,0.6,1],[34.20,-112.33,0.6,0],[31.77,-110.78,0.5,1],
+    [36.62,-105.27,0.7,1],[32.92,-107.57,0.6,0],[33.39,-108.80,0.6,2],[32.86,-108.21,0.6,0],
+    [35.43,-106.13,0.5,0],[33.75,-105.74,0.5,2],[46.59,-112.04,0.8,1],[45.294,-111.946,0.8,1],
+    [45.161,-112.996,0.7,1],[46.83,-113.34,0.5,2],[46.75,-112.30,0.6,2],[47.92,-108.55,0.6,2],
+    [43.828,-115.834,0.8,1],[45.27,-115.67,0.6,1],[43.014,-116.731,0.7,2],[43.80,-115.13,0.5,2],
+    [46.49,-115.80,0.5,1],[44.747,-118.201,0.7,1],[44.81,-118.42,0.5,1],[42.313,-122.967,0.7,1],
+    [44.39,-118.95,0.6,1],[47.25,-120.68,0.5,1],[48.648,-118.737,0.6,2],[47.42,-120.31,0.5,2],
+    [34.527,-83.985,0.8,0],[34.47,-84.02,0.6,1],[33.732,-84.918,0.5,0],[35.27,-80.47,0.7,0],
+    [35.52,-80.34,0.6,2],[34.62,-80.66,0.7,2],[38.40,-77.60,0.5,2],[42.47,-108.80,0.6,0],
+    [40.32,-112.22,0.6,2],[39.91,-112.10,0.6,2],[40.52,-112.15,0.6,2],[46.49,-87.69,0.4,2],[44.72,-70.62,0.4,1]
+  ];
+  const DISTRICT_NAMES = {"39.219,-121.061":"Grass Valley, CA","40.94,-116.35":"Goldstrike / Carlin Trend, NV","38.745,-105.178":"Cripple Creek, CO","44.352,-103.766":"Homestake / Lead, SD","38.8,-120.892":"Coloma (Sutter's Mill), CA","37.708,-117.235":"Goldfield, NV","34.527,-83.985":"Dahlonega, GA","64.5,-165.4":"Nome, AK"};
+
+  /* ---------- Embedded geology: gold provinces ---------- */
+  /* [lat,lng,radiusKm,favorability(0-1),type] */
+  const ZONES = [
+    [38.6,-120.7,180,0.92,0],[41.0,-123.0,120,0.70,0],[40.3,-116.4,220,0.88,2],[38.9,-118.6,160,0.70,2],
+    [37.5,-117.0,150,0.62,2],[39.1,-106.3,200,0.82,0],[37.85,-107.6,90,0.70,2],[44.25,-103.6,70,0.80,0],
+    [64.6,-147.0,260,0.70,1],[64.7,-164.5,160,0.72,1],[58.3,-134.0,150,0.60,2],[34.1,-112.7,170,0.60,0],
+    [32.9,-108.2,150,0.55,0],[36.4,-105.4,90,0.50,0],[46.4,-112.4,200,0.70,0],[44.2,-115.5,200,0.65,0],
+    [44.6,-118.5,140,0.60,1],[42.4,-123.2,110,0.58,1],[47.6,-120.5,110,0.50,0],[34.5,-84.0,90,0.60,0],
+    [35.2,-80.5,180,0.58,0],[38.0,-77.8,120,0.45,2],[42.5,-108.8,60,0.50,0],[40.1,-112.2,110,0.50,2]
+  ];
+
+  /* ---------- Map ---------- */
+  const map = L.map('map',{preferCanvas:true,worldCopyJump:false}).setView([39.5,-105.7],7);
+  map.createPane('prospect'); map.getPane('prospect').style.zIndex = 350; map.getPane('prospect').style.pointerEvents='none';
+
+  const baseLayers = {
+    'Esri Satellite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'}),
+    'USGS Topo': L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'USGS The National Map'}),
+    'USGS Imagery+Topo': L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'USGS'}),
+    'Shaded Relief': L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'USGS'})
+  };
+  baseLayers['Esri Satellite'].addTo(map);
+
+  const layers = {
+    mrds: L.layerGroup().addTo(map),
+    districts: L.layerGroup().addTo(map),
+    zones: L.layerGroup(),
+    claims: L.layerGroup().addTo(map),
+    land: L.layerGroup(),
+    targets: L.layerGroup().addTo(map)
+  };
+  let heatOverlay = null;
+  const overlayCtl = L.control.layers(baseLayers, {
+    'MRDS gold records':layers.mrds,
+    'Historic districts':layers.districts,
+    'Geology favorability':layers.zones,
+    'BLM land status':layers.land,
+    'Active claims':layers.claims,
+    'Ranked targets':layers.targets
+  },{collapsed:false}).addTo(map);
+
+  /* ---------- Data sources ---------- */
+  const MRDS_URL = 'https://services1.arcgis.com/ePTzl97n3QjMegUN/arcgis/rest/services/Mineral_Resources_Data_System/FeatureServer/0';
+  const CLAIMS_URL = 'https://gis.blm.gov/nlsdb/rest/services/HUB/BLM_Natl_MLRS_Mining_Claims_Not_Closed/FeatureServer/0';
+  const LAND_URL = 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0';
+
+  /* ---------- State ---------- */
+  let records = [];       // live MRDS: {lat,lng,w,dev,prod,name,type,url,attrs}
+  let claims = [];        // {lat,lng,rings,attrs}
+  let landPolys = [];     // {rings:[[lat,lng]...], access, label}
+  let landLoaded = false;
+  let targetRows = [];
+  let lastClick = null;
+  let moveTimer = null;
+
+  /* ---------- Helpers ---------- */
+  const statusEl = $('status');
+  function log(m){ const t=new Date().toLocaleTimeString(); statusEl.textContent += `\n[${t}] ${m}`; statusEl.scrollTop=statusEl.scrollHeight; }
+  function resetStatus(m='Ready.'){ statusEl.textContent=m; }
+  function safe(s){ return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+  function setStatusPill(id,state,txt){ const el=$(id); el.className='pill '+(state||''); el.textContent=txt; }
+  function bias(){ return $('depositBias').value; }
+  function influenceKm(){ return Number($('influence').value); }
+  function geoWeight(){ return Number($('geoWeight').value)/100; }
+
+  function kmPerDeg(lat){ return {x:111.32*Math.cos(lat*Math.PI/180), y:110.57}; }
+  function distKm(la1,lo1,la2,lo2){ const k=kmPerDeg((la1+la2)/2); const dx=(lo1-lo2)*k.x, dy=(la1-la2)*k.y; return Math.hypot(dx,dy); }
+  function distMi(a,b,c,d){ return distKm(a,b,c,d)*0.621371; }
+
+  async function fetchJson(url){ const r=await fetch(url,{mode:'cors'}); if(!r.ok) throw new Error(`${r.status}`); const j=await r.json(); if(j.error) throw new Error(j.error.message||'service error'); return j; }
+  function bboxJSON(pad){
+    const b=map.getBounds().pad(pad||0);
+    return JSON.stringify({xmin:b.getWest(),ymin:b.getSouth(),xmax:b.getEast(),ymax:b.getNorth(),spatialReference:{wkid:4326}});
+  }
+  function qp(extra){
+    return new URLSearchParams(Object.assign({
+      f:'json',outFields:'*',returnGeometry:'true',outSR:'4326',
+      geometry:bboxJSON(0.15),geometryType:'esriGeometryEnvelope',inSR:'4326',
+      spatialRel:'esriSpatialRelIntersects',geometryPrecision:'5'
+    },extra)).toString();
+  }
+
+  /* ---------- Record weighting (the honest part) ---------- */
+  const DEV_W = {'producer':1.0,'past producer':0.82,'prospect':0.5,'occurrence':0.32,'plant':0.4};
+  const SIZE_W = {'l':1.35,'m':1.15,'s':1.0,'large':1.35,'medium':1.15,'small':1.0};
+  function recordType(attrs){
+    const t=(`${attrs.dep_type||''} ${attrs.ore_ctrl||''} ${attrs.model||''} ${attrs.work_type||''} ${attrs.oper_type||''}`).toLowerCase();
+    const placer=/placer|alluv|gravel|dredge|hydraulic|bench|stream/.test(t);
+    const lode=/lode|vein|quartz|shear|epithermal|porphyry|skarn|disseminat|carlin|breccia/.test(t);
+    return placer&&!lode?1 : lode&&!placer?2 : 0;
+  }
+  function recordWeight(attrs){
+    const dev=(attrs.dev_stat||'').trim().toLowerCase();
+    let w = DEV_W[dev] ?? 0.4;
+    const size=(attrs.prod_size||'').trim().toLowerCase();
+    w *= (SIZE_W[size] ?? 1.0);
+    // primary vs secondary commodity
+    const c1=(attrs.commod1||'').toUpperCase();
+    if(!/GOLD|AU/.test(c1)) w *= 0.7;
+    return w;
+  }
+  function biasMult(type){
+    const b=bias();
+    if(b==='balanced') return 1;
+    if(b==='placer') return type===1?1.5 : type===2?0.6 : 1;
+    if(b==='lode')   return type===2?1.5 : type===1?0.6 : 1;
+    return 1;
+  }
+
+  /* ---------- Prospectivity surface (geographic KDE → canvas → imageOverlay) ---------- */
+  function buildField(){
+    const b = map.getBounds();
+    const S=b.getSouth(), N=b.getNorth(), W=b.getWest(), E=b.getEast();
+    const latSpan=N-S, lngSpan=E-W;
+    const mid=(N+S)/2, kpd=kmPerDeg(mid);
+    const widthKm=lngSpan*kpd.x, heightKm=latSpan*kpd.y;
+    // grid resolution proportional to aspect
+    const NY=120, aspect=Math.max(.3,Math.min(3.4, widthKm/heightKm));
+    const NX=Math.max(70,Math.min(240,Math.round(NY*aspect)));
+    const cellKmX=widthKm/NX, cellKmY=heightKm/NY;
+    const cellLat=latSpan/NY, cellLng=lngSpan/NX;
+
+    const ev=new Float32Array(NX*NY);    // combined evidence per cell
+    const evMax=new Float32Array(NX*NY); // strongest single weight in cell (quality)
+    const evSum=new Float32Array(NX*NY); // total weight in cell (quantity)
+    const geo=new Float32Array(NX*NY);   // geology favorability
+
+    function idxOf(lat,lng){
+      const gx=Math.floor((lng-W)/cellLng), gy=Math.floor((N-lat)/cellLat);
+      if(gx<0||gy<0||gx>=NX||gy>=NY) return -1;
+      return gy*NX+gx;
+    }
+    // 1) evidence: live records (within padded extent) + embedded districts
+    function addEv(lat,lng,w,type){
+      if(lat<S-latSpan*0.2||lat>N+latSpan*0.2||lng<W-lngSpan*0.2||lng>E+lngSpan*0.2) return;
+      const i=idxOf(Math.min(N,Math.max(S,lat)),Math.min(E,Math.max(W,lng)));
+      if(i<0) return;
+      const ww=w*biasMult(type);
+      if(ww>evMax[i]) evMax[i]=ww;
+      evSum[i]+=ww;
+    }
+    for(const r of records) addEv(r.lat,r.lng,r.w,r.type);
+    for(const d of DISTRICTS) addEv(d[0],d[1], d[2]*0.9, d[3]);
+    // quality dominates: a cell ranks at its strongest record, plus a capped bonus for corroborating ones.
+    for(let i=0;i<ev.length;i++) ev[i]=evMax[i] + 0.25*Math.min(1.2, Math.max(0,evSum[i]-evMax[i]));
+
+    // 2) geology: sample zones at each cell center (smooth falloff)
+    for(const z of ZONES){
+      const [zlat,zlng,rkm,fav,ztype]=z;
+      const bm=biasMult(ztype);
+      // bounding box of influence in cells
+      const rlat=rkm/kpd.y, rlng=rkm/kpd.x;
+      const gy0=Math.max(0,Math.floor((N-(zlat+rlat*1.6))/cellLat));
+      const gy1=Math.min(NY-1,Math.ceil((N-(zlat-rlat*1.6))/cellLat));
+      const gx0=Math.max(0,Math.floor(((zlng-rlng*1.6)-W)/cellLng));
+      const gx1=Math.min(NX-1,Math.ceil(((zlng+rlng*1.6)-W)/cellLng));
+      for(let gy=gy0;gy<=gy1;gy++){
+        const lat=N-(gy+0.5)*cellLat;
+        for(let gx=gx0;gx<=gx1;gx++){
+          const lng=W+(gx+0.5)*cellLng;
+          const dk=distKm(lat,lng,zlat,zlng);
+          const f=fav*Math.exp(-(dk*dk)/(2*(rkm*0.6)*(rkm*0.6)))*bm;
+          const i=gy*NX+gx;
+          if(f>geo[i]) geo[i]=f;
+        }
+      }
+    }
+
+    // 3) blur evidence with a geographic Gaussian (separable)
+    const sigCellsX=Math.max(0.6,influenceKm()/cellKmX);
+    const sigCellsY=Math.max(0.6,influenceKm()/cellKmY);
+    const evB=gaussBlur2D(ev,NX,NY,sigCellsX,sigCellsY);
+
+    // 4) normalize each field by robust high percentile
+    const evN=robustNorm(evB), geoN=robustNorm(geo);
+    const gw=geoWeight();
+    const field=new Float32Array(NX*NY);
+    let max=1e-6;
+    for(let i=0;i<field.length;i++){
+      // evidence-dominant where present; geology fills + adds synergy where they overlap
+      const e=evN[i], g=geoN[i];
+      let v = (1-gw*0.45)*e + gw*g + 0.35*e*g;
+      v = Math.pow(v, 0.85);
+      field[i]=v; if(v>max) max=v;
+    }
+    for(let i=0;i<field.length;i++) field[i]/=max;
+
+    return {field,NX,NY,bounds:[[S,W],[N,E]],cellLat,cellLng,N,W};
+  }
+
+  function gauss1D(sig){
+    const r=Math.max(1,Math.ceil(sig*3)); const k=new Float32Array(2*r+1); let s=0;
+    for(let i=-r;i<=r;i++){ const v=Math.exp(-(i*i)/(2*sig*sig)); k[i+r]=v; s+=v; }
+    for(let i=0;i<k.length;i++) k[i]/=s; return {k,r};
+  }
+  function gaussBlur2D(src,NX,NY,sigX,sigY){
+    const {k:kx,r:rx}=gauss1D(sigX), {k:ky,r:ry}=gauss1D(sigY);
+    const tmp=new Float32Array(NX*NY), out=new Float32Array(NX*NY);
+    for(let y=0;y<NY;y++) for(let x=0;x<NX;x++){
+      let acc=0; for(let i=-rx;i<=rx;i++){ const xx=Math.min(NX-1,Math.max(0,x+i)); acc+=src[y*NX+xx]*kx[i+rx]; }
+      tmp[y*NX+x]=acc;
+    }
+    for(let y=0;y<NY;y++) for(let x=0;x<NX;x++){
+      let acc=0; for(let i=-ry;i<=ry;i++){ const yy=Math.min(NY-1,Math.max(0,y+i)); acc+=tmp[yy*NX+x]*ky[i+ry]; }
+      out[y*NX+x]=acc;
+    }
+    return out;
+  }
+  function robustNorm(arr){
+    const nz=Array.from(arr).filter(v=>v>0).sort((a,b)=>a-b);
+    if(!nz.length) return arr.slice();
+    const p=nz[Math.floor(nz.length*0.96)]||nz[nz.length-1]||1;
+    const out=new Float32Array(arr.length);
+    for(let i=0;i<arr.length;i++) out[i]=Math.min(1,arr[i]/p);
+    return out;
+  }
+
+  // color ramp: transparent -> amber -> gold -> white-hot
+  const RAMP=[[0,[60,38,0,0]],[0.12,[70,44,0,70]],[0.32,[140,82,0,150]],[0.55,[201,140,0,200]],[0.74,[255,191,0,225]],[0.9,[255,225,105,238]],[1,[255,243,200,246]]];
+  function colorFor(v){
+    for(let i=1;i<RAMP.length;i++){
+      if(v<=RAMP[i][0]){
+        const a=RAMP[i-1],b=RAMP[i];const t=(v-a[0])/(b[0]-a[0]||1);
+        return [Math.round(a[1][0]+(b[1][0]-a[1][0])*t),Math.round(a[1][1]+(b[1][1]-a[1][1])*t),Math.round(a[1][2]+(b[1][2]-a[1][2])*t),Math.round(a[1][3]+(b[1][3]-a[1][3])*t)];
+      }
+    }
+    return RAMP[RAMP.length-1][1];
+  }
+  let fieldCache=null;
+  function renderSurface(){
+    fieldCache=buildField();
+    const {field,NX,NY,bounds}=fieldCache;
+    const cv=document.createElement('canvas'); cv.width=NX; cv.height=NY;
+    const ctx=cv.getContext('2d'); const img=ctx.createImageData(NX,NY);
+    for(let i=0;i<field.length;i++){
+      const c=colorFor(field[i]); const o=i*4;
+      img.data[o]=c[0];img.data[o+1]=c[1];img.data[o+2]=c[2];img.data[o+3]=field[i]<0.06?0:c[3];
+    }
+    ctx.putImageData(img,0,0);
+    const url=cv.toDataURL();
+    const op=Number($('heatOpacity').value)/100;
+    if(heatOverlay) map.removeLayer(heatOverlay);
+    heatOverlay=L.imageOverlay(url,bounds,{pane:'prospect',opacity:op,interactive:false}).addTo(map);
+  }
+  function sampleField(lat,lng){
+    if(!fieldCache) return 0;
+    const {field,NX,NY,N,W,cellLat,cellLng}=fieldCache;
+    const gx=Math.floor((lng-W)/cellLng), gy=Math.floor((N-lat)/cellLat);
+    if(gx<0||gy<0||gx>=NX||gy>=NY) return 0;
+    return field[gy*NX+gx];
+  }
+
+  /* ---------- Markers ---------- */
+  function drawDistricts(){
+    layers.districts.clearLayers();
+    for(const d of DISTRICTS){
+      const key=`${d[0]},${d[1]}`; const nm=DISTRICT_NAMES[key]||'Historic gold district';
+      const tname=d[3]===1?'placer':d[3]===2?'lode':'placer + lode';
+      L.circleMarker([d[0],d[1]],{radius:3.4,color:'#caa23c',weight:1,fillColor:'#3a2a08',fillOpacity:.7})
+        .bindPopup(`<div class="popup-title">${safe(nm)}</div><div class="kv"><div>Type</div><div>${tname}</div><div>Significance</div><div>${(d[2]*100).toFixed(0)}%</div><div>Source</div><div>Embedded historic record</div></div>`)
+        .addTo(layers.districts);
+    }
+  }
+  function drawZones(){
+    layers.zones.clearLayers();
+    for(const z of ZONES){
+      L.circle([z[0],z[1]],{radius:z[2]*1000,color:'#ffbf00',weight:1,opacity:.35,fillColor:'#ffbf00',fillOpacity:.04}).addTo(layers.zones);
+    }
+  }
+
+  /* ---------- Live loads ---------- */
+  function goldWhere(){
+    return "(UPPER(commod1) LIKE '%GOLD%' OR UPPER(commod2) LIKE '%GOLD%' OR UPPER(commod3) LIKE '%GOLD%')";
+  }
+  async function loadMRDS(limit){
+    setStatusPill('srcMrds','warn','loading');
+    const out=[]; let offset=0; const page=2000;
+    while(out.length<limit){
+      const params=qp({where:goldWhere(),resultRecordCount:String(Math.min(page,limit-out.length)),resultOffset:String(offset),
+        outFields:'site_name,dev_stat,prod_size,commod1,commod2,commod3,dep_type,ore_ctrl,oper_type,model,work_type,state,county,url'});
+      const j=await fetchJson(`${MRDS_URL}/query?${params}`);
+      const fs=j.features||[];
+      for(const f of fs){
+        const g=f.geometry; if(!g||!Number.isFinite(g.x)) continue;
+        const a=f.attributes||{};
+        const type=recordType(a);
+        out.push({lat:g.y,lng:g.x,w:recordWeight(a),dev:(a.dev_stat||'').trim(),prod:(a.prod_size||'').trim(),name:a.site_name||'Unnamed site',type,url:a.url,attrs:a});
+      }
+      if(!j.exceededTransferLimit||fs.length===0) break;
+      offset+=fs.length; log(`MRDS paging… ${out.length}`);
+    }
+    records=out;
+    layers.mrds.clearLayers();
+    for(const r of out){
+      const strong=/producer/i.test(r.dev);
+      L.circleMarker([r.lat,r.lng],{radius:strong?5.5:3.8,color:strong?'#fff6a3':'#d8b048',weight:1,fillColor:strong?'#ffcf33':'#7a5410',fillOpacity:strong?.95:.7})
+        .bindPopup(`<div class="popup-title">${safe(r.name)}</div><div class="kv"><div>Status</div><div>${safe(r.dev||'—')}</div><div>Size</div><div>${safe(r.prod||'—')}</div><div>Type</div><div>${r.type===1?'placer':r.type===2?'lode':'mixed/other'}</div><div>Commodities</div><div>${safe(r.attrs.commod1||'')}${r.attrs.commod2?', '+safe(r.attrs.commod2):''}</div><div>State</div><div>${safe(r.attrs.state||'')} ${safe(r.attrs.county||'')}</div><div>Evidence wt</div><div>${r.w.toFixed(2)}</div>${r.url?`<div>USGS</div><div><a style="color:#ffd24a" target="_blank" href="${safe(r.url)}">record ↗</a></div>`:''}</div>`)
+        .addTo(layers.mrds);
+    }
+    setStatusPill('srcMrds','ok',out.length.toLocaleString());
+    return out.length;
+  }
+  async function loadClaims(){
+    setStatusPill('srcClaims','warn','loading');
+    const params=qp({where:'1=1',resultRecordCount:'2000',outFields:'*'});
+    const j=await fetchJson(`${CLAIMS_URL}/query?${params}`);
+    const fs=j.features||[]; claims=[]; layers.claims.clearLayers();
+    for(const f of fs){
+      const g=f.geometry,a=f.attributes||{};
+      if(g?.rings){
+        const rings=g.rings.map(r=>r.map(p=>[p[1],p[0]]));
+        claims.push({lat:rings[0][0][0],lng:rings[0][0][1],rings,attrs:a});
+        L.polygon(rings,{color:'#ff8f2f',weight:1,opacity:.6,fillColor:'#ffb347',fillOpacity:.07})
+          .bindPopup(`<div class="popup-title">Active mining claim</div><div class="tiny">Someone may hold rights to this ground. Verify on BLM MLRS before prospecting.</div>`).addTo(layers.claims);
+      }
+    }
+    setStatusPill('srcClaims','ok',claims.length.toLocaleString());
+    return claims.length;
+  }
+  const ACCESS_COLOR={open:'#7fe09a',restricted:'#ffb15f',closed:'#ff7a72',private:'#7fb5ff',unknown:'#9a9a9a'};
+  function classifyAgency(name){
+    const n=(name||'').toLowerCase();
+    if(/land management/.test(n)) return {access:'open',label:'Bureau of Land Management'};
+    if(/forest service/.test(n)) return {access:'open',label:'US Forest Service'};
+    if(/park service|national park/.test(n)) return {access:'closed',label:'National Park Service'};
+    if(/fish and wildlife|wildlife refuge/.test(n)) return {access:'closed',label:'US Fish & Wildlife Service'};
+    if(/defense|army|navy|air force|military/.test(n)) return {access:'closed',label:'Department of Defense'};
+    if(/indian|tribal|bureau of indian/.test(n)) return {access:'closed',label:'Tribal / BIA land'};
+    if(/reclamation/.test(n)) return {access:'restricted',label:'Bureau of Reclamation'};
+    if(/tennessee valley/.test(n)) return {access:'restricted',label:'Tennessee Valley Authority'};
+    return {access:'restricted',label:name||'Other federal land'};
+  }
+  async function loadLand(){
+    setStatusPill('srcLand','warn','loading');
+    const params=qp({where:'1=1',resultRecordCount:'2000',outFields:'Agency,unit_name,link'});
+    const j=await fetchJson(`${LAND_URL}/query?${params}`);
+    const fs=j.features||[]; landPolys=[]; layers.land.clearLayers();
+    for(const f of fs){
+      const g=f.geometry,a=f.attributes||{};
+      if(!g?.rings) continue;
+      const m=classifyAgency(a.Agency);
+      const rings=g.rings.map(r=>r.map(p=>[p[1],p[0]]));
+      landPolys.push({rings,access:m.access,label:m.label});
+      const access=m.access;
+      L.polygon(rings,{color:ACCESS_COLOR[access],weight:.7,opacity:.4,fillColor:ACCESS_COLOR[access],fillOpacity:.07})
+        .bindPopup(`<div class="popup-title">${safe(m.label)}</div><div class="kv"><div>Mining access</div><div class="risk-${access==='open'?'low':access==='restricted'?'medium':'high'}">${access}</div><div>Unit</div><div>${safe(a.unit_name||'—')}</div>${a.link?`<div>Info</div><div><a style="color:#ffd24a" target="_blank" href="${safe(a.link)}">link ↗</a></div>`:''}</div><div class="tiny" style="margin-top:5px">Federal surface manager. Always confirm active claims separately.</div>`).addTo(layers.land);
+    }
+    landLoaded=true;
+    setStatusPill('srcLand','ok',landPolys.length.toLocaleString());
+    return landPolys.length;
+  }
+  function pointInRing(lat,lng,ring){
+    let inside=false;
+    for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+      const yi=ring[i][0],xi=ring[i][1],yj=ring[j][0],xj=ring[j][1];
+      if(((yi>lat)!==(yj>lat))&&(lng<(xj-xi)*(lat-yi)/(yj-yi)+xi)) inside=!inside;
+    }
+    return inside;
+  }
+  function landStatusAt(lat,lng){
+    for(const p of landPolys){ for(const ring of p.rings){ if(pointInRing(lat,lng,ring)) return p; } }
+    return null;
+  }
+
+  /* ---------- Targets (from the scored field, with non-max suppression) ---------- */
+  function buildTargets(){
+    layers.targets.clearLayers();
+    if(!fieldCache){ targetRows=[]; renderTargets(); return; }
+    const {field,NX,NY,N,W,cellLat,cellLng}=fieldCache;
+    const cells=[];
+    for(let gy=0;gy<NY;gy++) for(let gx=0;gx<NX;gx++){
+      const v=field[gy*NX+gx];
+      if(v>0.32) cells.push({v,lat:N-(gy+0.5)*cellLat,lng:W+(gx+0.5)*cellLng});
+    }
+    cells.sort((a,b)=>b.v-a.v);
+    const sepKm=Math.max(6,influenceKm()*1.2);
+    const picked=[];
+    for(const c of cells){
+      if(picked.length>=10) break;
+      if(picked.some(p=>distKm(p.lat,p.lng,c.lat,c.lng)<sepKm)) continue;
+      picked.push(c);
+    }
+    targetRows=picked.map(c=>{
+      const rNear=records.filter(r=>distKm(c.lat,c.lng,r.lat,r.lng)<=influenceKm()*1.3);
+      const dNear=DISTRICTS.filter(d=>distKm(c.lat,c.lng,d[0],d[1])<=influenceKm()*1.3);
+      const producers=rNear.filter(r=>/producer/i.test(r.dev)).length;
+      const land=landStatusAt(c.lat,c.lng);
+      const claimsNear=claims.filter(cl=>distKm(c.lat,c.lng,cl.lat,cl.lng)<=influenceKm()).length;
+      // confidence
+      let conf;
+      if(rNear.length===0 && dNear.length===0) conf=Math.round(18+c.v*22); // geology only
+      else conf=Math.min(95,Math.round(38+producers*15+Math.min(30,rNear.length*3)+Math.min(12,dNear.length*6)));
+      // access risk
+      let risk='Verify',riskNote='Land status not loaded — verify ownership before any field work.';
+      if(land){
+        if(land.access==='closed'){risk='High';riskNote=`${land.label} — generally withdrawn from mineral entry.`;}
+        else if(land.access==='restricted'){risk='Medium';riskNote=`${land.label} — special rules likely; confirm before entry.`;}
+        else {risk='Low';riskNote=`${land.label} — generally open to mineral location, with rules.`;}
+      } else if(landLoaded){
+        risk='Medium';riskNote='Not federal land — likely private or state; permission/lease required.';
+      }
+      if(claimsNear>0 && risk==='Low'){risk='Medium';}
+      if(claimsNear>0) riskNote+=` ${claimsNear} active claim(s) within ${influenceKm()} km.`;
+      return {...c,rNear,dNear,producers,conf,risk,riskNote,claimsNear,land};
+    });
+    renderTargets();
+    // draw markers
+    targetRows.forEach((t,i)=>{
+      const col=t.risk==='High'?'#ff756f':t.risk==='Medium'?'#ffb15f':t.risk==='Verify'?'#cfcfcf':'#93e6a2';
+      L.circle([t.lat,t.lng],{radius:Math.max(1800,influenceKm()*600),color:'#fff3a3',weight:1.3,fillColor:col,fillOpacity:.16})
+        .bindPopup(`<div class="popup-title">Target #${i+1}</div><div class="kv"><div>Prospectivity</div><div>${(t.v*100).toFixed(0)}/100</div><div>Confidence</div><div>${t.conf}%</div><div>Producers near</div><div>${t.producers}</div><div>Records near</div><div>${t.rNear.length}</div><div>Access</div><div class="risk-${t.risk.toLowerCase()}">${t.risk}</div><div>Note</div><div>${safe(t.riskNote)}</div></div>`)
+        .addTo(layers.targets);
+      L.marker([t.lat,t.lng],{icon:L.divIcon({className:'',html:`<div style="background:#1a1206;border:1.5px solid ${col};color:#ffd24a;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font:700 11px system-ui">${i+1}</div>`,iconSize:[20,20]})}).addTo(layers.targets);
+    });
+  }
+  function whyText(t){
+    const parts=[];
+    if(t.producers) parts.push(`${t.producers} documented producer${t.producers===1?'':'s'}`);
+    if(t.rNear.length) parts.push(`${t.rNear.length} MRDS gold record${t.rNear.length===1?'':'s'}`);
+    if(t.dNear.length) parts.push(`near ${t.dNear.length} historic district${t.dNear.length===1?'':'s'}`);
+    if(!t.rNear.length && !t.dNear.length) parts.push('favorable geology, no documented records (geologic inference — low confidence)');
+    return parts.join(' · ');
+  }
+  function renderTargets(){
+    const el=$('targets');
+    if(!targetRows.length){ el.innerHTML='<span class="danger">No target cells in view. Zoom to a gold province or press Scan area.</span>'; updateMetrics(); return; }
+    el.innerHTML='';
+    targetRows.forEach((t,i)=>{
+      const div=document.createElement('div'); div.className='target';
+      div.innerHTML=`<div class="head"><b>#${i+1}</b><span class="score">${(t.v*100).toFixed(0)}</span></div>
+        <div class="tiny">Confidence ${t.conf}% · access <span class="risk-${t.risk.toLowerCase()}">${t.risk}</span></div>
+        <div class="small" style="margin:6px 0">${safe(whyText(t))}</div>
+        <div class="tiny">${safe(t.riskNote)}</div>
+        <div class="row" style="margin-top:6px"><button class="secondary" data-zoom="${i}">Zoom</button><button class="secondary" data-audit="${i}">Audit</button><button class="secondary" data-copy="${i}">Copy</button></div>`;
+      el.appendChild(div);
+    });
+    el.querySelectorAll('button[data-zoom]').forEach(b=>b.onclick=()=>{const t=targetRows[+b.dataset.zoom];map.setView([t.lat,t.lng],Math.max(map.getZoom(),11));});
+    el.querySelectorAll('button[data-audit]').forEach(b=>b.onclick=()=>{const t=targetRows[+b.dataset.audit];map.setView([t.lat,t.lng],Math.max(map.getZoom(),11));inspect(t.lat,t.lng);});
+    el.querySelectorAll('button[data-copy]').forEach(b=>b.onclick=()=>{const t=targetRows[+b.dataset.copy];copyText(`${t.lat.toFixed(6)}, ${t.lng.toFixed(6)}`);});
+    updateMetrics();
+  }
+  function updateMetrics(){
+    $('mGold').textContent=records.length.toLocaleString();
+    $('mProd').textContent=records.filter(r=>/producer/i.test(r.dev)).length.toLocaleString();
+    if(targetRows.length){ $('mTop').textContent=(targetRows[0].v*100).toFixed(0); $('mConf').textContent=targetRows[0].conf+'%'; }
+    else { $('mTop').textContent='—'; $('mConf').textContent='—'; }
+  }
+
+  /* ---------- Inspector ---------- */
+  function inspect(lat,lng){
+    lastClick={lat,lng};
+    const r=Number($('inspectRadius').value);
+    const near=records.filter(e=>distMi(lat,lng,e.lat,e.lng)<=r);
+    const dist=DISTRICTS.filter(d=>distMi(lat,lng,d[0],d[1])<=r);
+    const cl=claims.filter(c=>distMi(lat,lng,c.lat,c.lng)<=r);
+    const producers=near.filter(e=>/producer/i.test(e.dev)).length;
+    const v=sampleField(lat,lng);
+    const land=landStatusAt(lat,lng);
+    let access='Not loaded — verify ownership', acls='verify';
+    if(land){ access=land.label+' ('+land.access+')'; acls=land.access; }
+    else if(landLoaded){ access='Not federal — likely private/state, verify'; acls='medium'; }
+    let advice;
+    if(v>=0.7 && (acls==='open')) advice='Strong prospectivity on generally-open ground. Confirm claim status, then scout drainages and outcrops.';
+    else if(v>=0.7) advice='Strong prospectivity, but access is restricted/closed/private or unverified. Treat as a research lead, not permission.';
+    else if(v>=0.4) advice='Moderate prospectivity. Look for structural/geologic confirmation and nearby placer drainages.';
+    else advice='Low prospectivity from loaded data + geology here.';
+    $('inspector').innerHTML=`<b>Point assessment</b><br>
+      <span class="tiny">${lat.toFixed(5)}, ${lng.toFixed(5)} · ${r} mi radius · prospectivity <b>${(v*100).toFixed(0)}/100</b></span>
+      <div class="grid" style="margin-top:8px">
+        <div class="metric"><b>${near.length}</b><span>MRDS records near</span></div>
+        <div class="metric"><b>${producers}</b><span>producers near</span></div>
+        <div class="metric"><b>${dist.length}</b><span>historic districts</span></div>
+        <div class="metric"><b>${cl.length}</b><span>claims near</span></div>
+      </div>
+      <p class="small" style="margin:8px 0 4px">Land: <span class="risk-${acls==='open'?'low':(acls==='restricted'||acls==='medium')?'medium':acls==='verify'?'verify':'high'}">${safe(access)}</span></p>
+      <p class="small">${advice}</p>
+      <p class="tiny">Field checklist: verify active claims (BLM MLRS), surface &amp; mineral ownership, road/access legality, waterway dredging rules, seasonal/fire closures, slope &amp; weather, and abandoned-mine hazards.</p>
+      <button class="secondary" id="copyPointBtn">Copy coordinates</button>`;
+    const b=$('copyPointBtn'); if(b) b.onclick=()=>copyText(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+  }
+  function copyText(t){
+    if(navigator.clipboard&&window.isSecureContext) navigator.clipboard.writeText(t).then(()=>log('Copied: '+t)).catch(()=>log('Copy manually: '+t));
+    else log('Copy manually: '+t);
+  }
+
+  /* ---------- Orchestration ---------- */
+  function recompute(){ renderSurface(); buildTargets(); if(lastClick) inspect(lastClick.lat,lastClick.lng); }
+  function viewportMsg(){
+    const z=map.getZoom();
+    if(z<5) return 'Wide overview — geology + districts. Zoom to a province for field targets.';
+    if(z<7) return 'Regional — good for trends. Scan area to add live records.';
+    if(z<=12) return 'District scale — best for target ranking. Scan area for live MRDS.';
+    return 'Very close — good for inspection; fewer records may return.';
+  }
+  function updateHint(){ $('viewportHint').textContent=viewportMsg(); }
+
+  async function loadViewport(){
+    $('loadBtn').disabled=true; resetStatus('Scanning…');
+    setStatusPill('srcMrds','','idle'); setStatusPill('srcClaims','','idle'); setStatusPill('srcLand','','idle');
+    try{
+      const limit=Number($('limitSelect').value);
+      const jobs=[];
+      if($('mrdsToggle').checked) jobs.push(loadMRDS(limit).catch(e=>{setStatusPill('srcMrds','bad','failed');log('MRDS failed: '+e.message);}));
+      if($('claimsToggle').checked) jobs.push(loadClaims().catch(e=>{setStatusPill('srcClaims','bad','failed');log('Claims failed: '+e.message);}));
+      else { claims=[]; layers.claims.clearLayers(); }
+      if($('landToggle').checked) jobs.push(loadLand().catch(e=>{setStatusPill('srcLand','bad','failed');log('Land status failed: '+e.message);}));
+      else { landPolys=[]; layers.land.clearLayers(); }
+      await Promise.allSettled(jobs);
+      recompute();
+      log(`Scan done. Records ${records.length}, claims ${claims.length}, land parcels ${landPolys.length}.`);
+    } finally { $('loadBtn').disabled=false; }
+  }
+
+  /* ---------- Events ---------- */
+  $('panelBtn').onclick=()=>{ $('app').classList.toggle('collapsed'); setTimeout(()=>map.invalidateSize(),220); };
+  $('jumpBtn').onclick=()=>{ const [la,lo,z]=$('jumpSelect').value.split(',').map(Number); map.setView([la,lo],z); };
+  $('locBtn').onclick=()=>{ if(!navigator.geolocation){log('GPS unavailable.');return;} navigator.geolocation.getCurrentPosition(p=>map.setView([p.coords.latitude,p.coords.longitude],11),e=>log('GPS failed: '+e.message)); };
+  $('loadBtn').onclick=loadViewport;
+  $('clearBtn').onclick=()=>{ records=[];claims=[];landPolys=[];landLoaded=false;targetRows=[];lastClick=null; layers.mrds.clearLayers();layers.claims.clearLayers();layers.land.clearLayers();layers.targets.clearLayers(); setStatusPill('srcMrds','','idle');setStatusPill('srcClaims','','idle');setStatusPill('srcLand','','idle'); resetStatus('Cleared.'); recompute(); $('inspector').textContent='Click anywhere on the map to audit nearby evidence, land status, and field notes.'; };
+  $('influence').oninput=()=>{ $('influenceKm').textContent=$('influence').value+' km'; recompute(); };
+  $('geoWeight').oninput=()=>{ $('geoWeightPct').textContent=$('geoWeight').value+'%'; recompute(); };
+  $('heatOpacity').oninput=()=>{ if(heatOverlay) heatOverlay.setOpacity(Number($('heatOpacity').value)/100); };
+  $('depositBias').onchange=recompute;
+  $('inspectRadius').oninput=()=>{ $('inspectMiles').textContent=$('inspectRadius').value+' mi'; if(lastClick) inspect(lastClick.lat,lastClick.lng); };
+  map.on('click',e=>inspect(e.latlng.lat,e.latlng.lng));
+  map.on('moveend',()=>{
+    updateHint();
+    clearTimeout(moveTimer);
+    moveTimer=setTimeout(()=>{
+      recompute();                                  // cheap: re-anchor surface to new view
+      if($('autoRescan').checked && map.getZoom()>=7) loadViewport();
+    },260);
+  });
+
+  /* ---------- Init ---------- */
+  drawDistricts(); drawZones(); updateHint(); recompute();
+  log('V4 ready. Geology + historic districts loaded. Press "Scan area" to pull live USGS/BLM data for this view.');
+})();
+</script>
+</body>
+</html>
