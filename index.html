@@ -437,6 +437,8 @@
   function distKm(la1,lo1,la2,lo2){ const k=kmPerDeg((la1+la2)/2); return Math.hypot((lo1-lo2)*k.x,(la1-la2)*k.y); }
   const distMi=(a,b,c,d)=>distKm(a,b,c,d)*0.621371;
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const mercY=lat=>{ const r=clamp(lat,-85.05,85.05)*Math.PI/180; return Math.log(Math.tan(Math.PI/4+r/2)); };
+  const invMercY=y=>(2*Math.atan(Math.exp(y))-Math.PI/2)*180/Math.PI;
   const pct=v=>Math.round(v*100);
   function viewWidthKm(){ const b=map.getBounds(); return (b.getEast()-b.getWest())*kmPerDeg(b.getCenter().lat).x; }
 
@@ -492,9 +494,13 @@
     const latSpan=N-S,lngSpan=E-Wl, kpd=kmPerDeg((N+S)/2);
     const widthKm=lngSpan*kpd.x,heightKm=latSpan*kpd.y;
     const NY=190, aspect=clamp(widthKm/heightKm,.3,3.4), NX=clamp(Math.round(NY*aspect),100,380);
-    const cellKmX=widthKm/NX,cellKmY=heightKm/NY,cellLat=latSpan/NY,cellLng=lngSpan/NX;
+    const cellKmX=widthKm/NX,cellKmY=heightKm/NY,cellLng=lngSpan/NX;
+    // Rows are evenly spaced in Web Mercator y, exactly how Leaflet stretches an imageOverlay,
+    // so each cell is drawn where its evidence really is at every zoom.
+    const yN=mercY(N), dY=(yN-mercY(S))/NY;
+    const rowLat=gy=>invMercY(yN-(gy+.5)*dY), rowOf=lat=>Math.floor((yN-mercY(lat))/dY);
     const n=NX*NY;
-    const idxOf=(lat,lng)=>{ const gx=Math.floor((lng-Wl)/cellLng),gy=Math.floor((N-lat)/cellLat); return (gx<0||gy<0||gx>=NX||gy>=NY)?-1:gy*NX+gx; };
+    const idxOf=(lat,lng)=>{ const gx=Math.floor((lng-Wl)/cellLng),gy=rowOf(lat); return (gx<0||gy<0||gx>=NX||gy>=NY)?-1:gy*NX+gx; };
     const inPad=(lat,lng)=>!(lat<S||lat>=N||lng<Wl||lng>=E);
 
     /* History: best record per cell + capped corroboration */
@@ -510,9 +516,9 @@
     const gRaw=new Float32Array(n);
     for(const z of ZONES){
       const [zlat,zlng,rkm,fav,ztype]=z, bm=biasMult(ztype), rlat=rkm/kpd.y, rlng=rkm/kpd.x;
-      const gy0=Math.max(0,Math.floor((N-(zlat+rlat*1.6))/cellLat)), gy1=Math.min(NY-1,Math.ceil((N-(zlat-rlat*1.6))/cellLat));
+      const gy0=Math.max(0,rowOf(Math.min(N,zlat+rlat*1.6))), gy1=Math.min(NY-1,rowOf(Math.max(S,zlat-rlat*1.6))+1);
       const gx0=Math.max(0,Math.floor(((zlng-rlng*1.6)-Wl)/cellLng)), gx1=Math.min(NX-1,Math.ceil(((zlng+rlng*1.6)-Wl)/cellLng));
-      for(let gy=gy0;gy<=gy1;gy++){ const lat=N-(gy+.5)*cellLat; for(let gx=gx0;gx<=gx1;gx++){ const lng=Wl+(gx+.5)*cellLng; const dk=distKm(lat,lng,zlat,zlng); const f=fav*Math.exp(-(dk*dk)/(2*(rkm*.6)**2))*bm; const i=gy*NX+gx; if(f>gRaw[i]) gRaw[i]=f; } }
+      for(let gy=gy0;gy<=gy1;gy++){ const lat=rowLat(gy); for(let gx=gx0;gx<=gx1;gx++){ const lng=Wl+(gx+.5)*cellLng; const dk=distKm(lat,lng,zlat,zlng); const f=fav*Math.exp(-(dk*dk)/(2*(rkm*.6)**2))*bm; const i=gy*NX+gx; if(f>gRaw[i]) gRaw[i]=f; } }
     }
     const G=gRaw; // already 0..~0.9 in absolute terms (keeps meaning across views)
 
@@ -531,7 +537,7 @@
       const cs=Math.max(3,sig*0.6);
       C=robustNorm(gaussBlur2D(cRaw,NX,NY,Math.max(.6,cs/cellKmX),Math.max(.6,cs/cellKmY)));
       // known where any sample was tested within ~1 coverage cell
-      for(let gy=0;gy<NY;gy++){ const lat=N-(gy+.5)*cellLat; const la=Math.floor(lat*10);
+      for(let gy=0;gy<NY;gy++){ const lat=rowLat(gy); const la=Math.floor(lat*10);
         for(let gx=0;gx<NX;gx++){ const lng=Wl+(gx+.5)*cellLng; const lo=Math.floor(lng*10); let t=0;
           for(let dy=-1;dy<=1&&!t;dy++) for(let dx=-1;dx<=1&&!t;dx++){ const c=COV.get((la+dy)+','+(lo+dx)); if(c&&(c[0]+c[1])>0) t=1; }
           Ck[gy*NX+gx]=t||C[gy*NX+gx]>0.05?1:0; } }
@@ -539,11 +545,11 @@
 
     /* Satellite alteration: box-average anomaly raster into each cell */
     let A=new Float32Array(n), Ak=new Uint8Array(n), satOn=false;
-    if(SAT){ satOn=sampleSatIntoGrid(A,Ak,NX,NY,N,Wl,cellLat,cellLng); if(satOn) A=robustNorm(gaussBlur2D(A,NX,NY,.7,.7)); }
+    if(SAT){ satOn=sampleSatIntoGrid(A,Ak,NX,NY,yN,dY,Wl,cellLng); if(satOn) A=robustNorm(gaussBlur2D(A,NX,NY,.7,.7)); }
 
     /* Combine: weighted average over channels that have data, + convergence bonus */
     const w=W(), field=new Float32Array(n), wAll=w.hist+w.geo+(chemOn?w.chem:0)+(satOn?w.sat:0)||1;
-    const vb=map.getBounds(), vy0=Math.floor((N-vb.getNorth())/cellLat), vy1=Math.ceil((N-vb.getSouth())/cellLat), vx0=Math.floor((vb.getWest()-Wl)/cellLng), vx1=Math.ceil((vb.getEast()-Wl)/cellLng);
+    const vb=map.getBounds(), vy0=rowOf(vb.getNorth()), vy1=rowOf(vb.getSouth())+1, vx0=Math.floor((vb.getWest()-Wl)/cellLng), vx1=Math.ceil((vb.getEast()-Wl)/cellLng);
     let max=1e-6;
     for(let i=0;i<n;i++){
       let num=w.hist*H[i]+w.geo*G[i], den=w.hist+w.geo, agree=(H[i]>.3?1:0)+(G[i]>.45?.5:0);
@@ -555,7 +561,7 @@
       const gy=(i/NX)|0, gx=i-gy*NX; if(gy>=vy0&&gy<vy1&&gx>=vx0&&gx<vx1&&v>max) max=v;
     }
     for(let i=0;i<n;i++) field[i]=Math.min(1,field[i]/max);
-    return {field,H,G,C,Ck,A,Ak,chemOn,satOn,NX,NY,bounds:[[S,Wl],[N,E]],cellLat,cellLng,N,W:Wl};
+    return {field,H,G,C,Ck,A,Ak,chemOn,satOn,NX,NY,bounds:[[S,Wl],[N,E]],cellLng,N,W:Wl,rowLat,rowOf};
   }
 
   const RAMP=[[0,[110,66,0,0]],[0.22,[120,72,0,0]],[0.36,[160,96,0,110]],[0.55,[210,142,0,185]],[0.74,[255,191,0,218]],[0.9,[255,226,110,236]],[1,[255,246,208,246]]];
@@ -574,8 +580,8 @@
   }
   function sampleCell(lat,lng){
     if(!fieldCache) return null;
-    const {NX,NY,N,W:Wl,cellLat,cellLng}=fieldCache;
-    const gx=Math.floor((lng-Wl)/cellLng),gy=Math.floor((N-lat)/cellLat);
+    const {NX,NY,W:Wl,cellLng,rowOf}=fieldCache;
+    const gx=Math.floor((lng-Wl)/cellLng),gy=rowOf(lat);
     if(gx<0||gy<0||gx>=NX||gy>=NY) return null;
     const i=gy*NX+gx, f=fieldCache;
     return {v:f.field[i],H:f.H[i],G:f.G[i],C:f.chemOn&&f.Ck[i]?f.C[i]:null,A:f.satOn&&f.Ak[i]?f.A[i]:null};
@@ -714,7 +720,7 @@
     if($('L_sat').checked) satOverlay.addTo(map);
     $('legendSat').style.display=$('L_sat').checked?'block':'none';
   }
-  function sampleSatIntoGrid(A,Ak,NX,NY,N,Wl,cellLat,cellLng){
+  function sampleSatIntoGrid(A,Ak,NX,NY,yN,dY,Wl,cellLng){
     const s=SAT; if(!s) return false;
     const {Wd,Hd,alt,bare,x0,y0,x1,y1}=s;
     if(!s.I){ // integral images of anomaly and bare mask
@@ -724,12 +730,12 @@
     const sum=(I,ax,ay,bx,by)=>I[by*(Wd+1)+bx]-I[ay*(Wd+1)+bx]-I[by*(Wd+1)+ax]+I[ay*(Wd+1)+ax];
     let any=false;
     for(let gy=0;gy<NY;gy++){
-      const pTop=merc(N-gy*cellLat,Wl), pBot=merc(N-(gy+1)*cellLat,Wl);
+      const R=6378137, pTop={y:(yN-gy*dY)*R}, pBot={y:(yN-(gy+1)*dY)*R};
       const ay=Math.floor((y1-pTop.y)/(y1-y0)*Hd), by=Math.ceil((y1-pBot.y)/(y1-y0)*Hd);
       if(by<=0||ay>=Hd) continue;
       const cy0=clamp(ay,0,Hd),cy1=clamp(by,0,Hd); if(cy1<=cy0) continue;
       for(let gx=0;gx<NX;gx++){
-        const pL=merc(N,Wl+gx*cellLng).x, pR=merc(N,Wl+(gx+1)*cellLng).x;
+        const pL=(Wl+gx*cellLng)*Math.PI/180*R, pR=(Wl+(gx+1)*cellLng)*Math.PI/180*R;
         const ax=Math.floor((pL-x0)/(x1-x0)*Wd), bx=Math.ceil((pR-x0)/(x1-x0)*Wd);
         const cx0=clamp(ax,0,Wd),cx1=clamp(bx,0,Wd); if(cx1<=cx0) continue;
         const area=(cx1-cx0)*(cy1-cy0), nb=sum(s.IB,cx0,cy0,cx1,cy1);
@@ -919,9 +925,9 @@
   function buildTargets(){
     layers.targets.clearLayers();
     if(!fieldCache){ targetRows=[]; renderTargets(); return; }
-    const {field,NX,NY,N,W:Wl,cellLat,cellLng}=fieldCache, cells=[];
+    const {field,NX,NY,W:Wl,cellLng,rowLat}=fieldCache, cells=[];
     const vb=map.getBounds();
-    for(let gy=0;gy<NY;gy++) for(let gx=0;gx<NX;gx++){ const v=field[gy*NX+gx]; if(v<=0.34) continue; const lat=N-(gy+.5)*cellLat,lng=Wl+(gx+.5)*cellLng; if(vb.contains([lat,lng])) cells.push({v,lat,lng}); }
+    for(let gy=0;gy<NY;gy++) for(let gx=0;gx<NX;gx++){ const v=field[gy*NX+gx]; if(v<=0.34) continue; const lat=rowLat(gy),lng=Wl+(gx+.5)*cellLng; if(vb.contains([lat,lng])) cells.push({v,lat,lng}); }
     cells.sort((a,b)=>b.v-a.v);
     const sepKm=Math.max(4,Math.min(viewWidthKm()/6,influenceKm()*1.2)), picked=[];
     for(const c of cells){ if(picked.length>=10) break; if(picked.some(p=>distKm(p.lat,p.lng,c.lat,c.lng)<sepKm)) continue; picked.push(c); }
