@@ -1,12 +1,12 @@
 # Sentinel Gold Hunter Intel Dashboard: V4 (archived)
 
-> **Archived version.** This is V4 as it shipped in June 2026, kept so you can see how the app evolved. The current app is at [jkh2.github.io/sentinel-gold-hunter](https://jkh2.github.io/sentinel-gold-hunter/).
+> **Archived version.** This is V4 as it shipped in June 2026, kept so you can see how the app evolved. The current app is at [jkh2.github.io/sentinel-gold-hunter](https://jameskeithharwood.com/sentinel-gold-hunter/).
 >
 > Known issue, left as-is for the record: the ArcGIS copy of USGS MRDS that V4 reads now requires a token, so V4 no longer loads live gold records. Claims, land status, embedded districts, and geology still work. V5 fixed this by reading MRDS from USGS directly.
 
 ![Gold Hunter Intel Dashboard V4](screenshot.jpg)
 
-**[▶ Launch archived V4](https://jkh2.github.io/sentinel-gold-hunter/versions/v4/)**
+**[▶ Launch archived V4](https://jameskeithharwood.com/sentinel-gold-hunter/versions/v4/)**
 
 A single-file, browser-based gold prospecting intelligence tool that maps **where gold is geologically favorable and historically documented** across the United States. Built on live USGS and BLM data, embedded historic district knowledge, and a geographic prospectivity model — not just a dot map.
 

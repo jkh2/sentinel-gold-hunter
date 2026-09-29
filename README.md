@@ -2,7 +2,7 @@
 
 ![Sentinel Gold Hunter V5 over Summitville, Colorado](assets/screenshot-v5.jpg)
 
-**[▶ Launch Live App](https://jkh2.github.io/sentinel-gold-hunter/)** · [Version history](#version-history)
+**[▶ Launch Live App](https://jameskeithharwood.com/sentinel-gold-hunter/)** · [Version history](#version-history)
 
 A browser-based gold prospecting tool that maps **where independent evidence for gold converges** across the United States, and **who controls the ground**. It blends historic mine records, 945,000 USGS geochemistry samples, Sentinel-2 satellite alteration, and regional geology into one scored surface, then ranks targets you can take into the field.
 
@@ -29,8 +29,8 @@ Earlier versions stay online so you can see how the app evolved.
 
 | Version | Released | What it was | Try it |
 |---|---|---|---|
-| **V5** (current) | Sept 2026 | Four evidence channels: history, geochemistry, satellite alteration, geology. USGS context layers, GPX export | [Live app](https://jkh2.github.io/sentinel-gold-hunter/) |
-| V4 | June 2026 | Rebuilt the heat map as a geographic KDE; MRDS weighted by producer status; land status and claims | [Archived V4](https://jkh2.github.io/sentinel-gold-hunter/versions/v4/) · [notes](versions/v4/README.md) |
+| **V5** (current) | Sept 2026 | Four evidence channels: history, geochemistry, satellite alteration, geology. USGS context layers, GPX export | [Live app](https://jameskeithharwood.com/sentinel-gold-hunter/) |
+| V4 | June 2026 | Rebuilt the heat map as a geographic KDE; MRDS weighted by producer status; land status and claims | [Archived V4](https://jameskeithharwood.com/sentinel-gold-hunter/versions/v4/) · [notes](versions/v4/README.md) |
 
 V4's original source is also preserved on the [`archive-v4`](https://github.com/jkh2/sentinel-gold-hunter/tree/archive-v4) branch.
 
